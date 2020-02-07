@@ -29,7 +29,6 @@ infection_search_window = 3888000000
 webclient = None 
 
 vers_dict = {}
-regex = re.compile(r'Builder Number: (\d*)')
 
 # Access EPO credentials and Slackbot Token
 # Credential format is: EPO_Username\nEPO_Password\nSlackToken
@@ -58,17 +57,20 @@ AT_BOT = "<@" + BOT_ID + ">"
 slack_client = slack.RTMClient(token=SLACK_BOT_TOKEN)
 
 
-#Core BOT Functions
 #Slack channel parser
 @slack_client.run_on(event='message')
 def parse_slack_output(**slack_rtm_output):
-    if slack_rtm_output and len(slack_rtm_output) > 0:
+    '''
+    This method is run when the api detects new messages in the Slack channel the bot resides in.
 
+    When the message contains the bot's ID (in variable AT_BOT), we parse the message for commands.
+    If the command is recognized, we create a new thread to handle processing of the command.
+    '''
+    if slack_rtm_output and len(slack_rtm_output) > 0:
         data = slack_rtm_output['data']
 
         global webclient
         webclient = slack_rtm_output['web_client']
-
         try:
             if AT_BOT in data['text']:
                 # return text after the @ mention, whitespace removed
@@ -92,6 +94,11 @@ def parse_slack_output(**slack_rtm_output):
 
 #Displays help in requested channel
 def display_help(channel, usr_args):
+    '''
+    This method gets executed when a user messages at McBot with '?' or 'help'
+    '''
+
+
     response = """ Hi, I am """ + BOT_NAME + "!" + """
     I am here to help technicans check a computers McAfee Health Status.
     I accept commands in the \""""+ BOT_NAME + """ [Command]\" format.
@@ -103,6 +110,7 @@ def display_help(channel, usr_args):
     """
     webclient.chat_postMessage(channel=channel, text=response, as_user=True)
 
+#####################
 
 def mac_healthchk(response):                #Evaluates OSX Health check data
     if response.find("On-Access Scan Enabled: true") != -1 and response.find("Definitions Up To Date (AMCore Content): true") != -1:
@@ -135,9 +143,19 @@ def InfectionHistory(usr_args):
     else:
         return False
 
+#####################
 
 #Launches a McAfee health check for user define computer name
 def run_namecheck(channel, usr_args):
+    '''
+    This method gets executed when a user messages at McBot with a non-help command.
+    It is assumed that the text following @McBot is a system name
+
+    This method will query the hostnames contained in the 'hostnames' list for the given system name. If the system is found,
+    we perform different logic (for the sake of relevant McAfee products) depending on whether the system is windows or mac.
+
+    We compare version numbers for different McAfee products to an external list (loaded into variable mcafee_vers_dict)
+    '''
 
     hostnames = [
                     "hostname1",
@@ -174,6 +192,7 @@ def run_namecheck(channel, usr_args):
     os_string = os_result.text.replace(' ', '').lower() # modify query result for operating system to facilitate string comparisons
 
     if 'macos' in os_string:
+        # SQL fields that we will use to query EPO
         mac_query_fields = [
                             'AM_CustomProps.AVCMGRbComplianceStatus',
                             'EPOLeafNode.NodeName',
@@ -193,6 +212,7 @@ def run_namecheck(channel, usr_args):
 
 
     elif 'windows' in os_string:
+        # SQL fields that we will use to query EPO
         win_query_fields = [
                             'EPOLeafNode.NodeName',
                             'EPOComputerProperties.OSType',
@@ -263,7 +283,7 @@ def run_namecheck(channel, usr_args):
         if mcafee_up_to_date:
             response_entries[0] = response_entries[0].replace("OK:", ":heavy_check_mark: :windows: *Windows Client McAfee Products Up-To-Date* :heavy_check_mark:")
         else:
-            response_entries[0] = response_entries[0].replace("OK:", ":x: *Outdated Client McAfee Products Shown in Bold* :x:")
+            response_entries[0] = response_entries[0].replace("OK:", ":x: :windows: *Outdated Client McAfee Products Shown in Bold* :x:")
         
         # Create response text for slack chat by joining response entries list
         response = '\n'.join(response_entries)
